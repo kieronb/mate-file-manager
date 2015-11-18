@@ -32,6 +32,7 @@
 #include "caja-application.h"
 #include "caja-self-check-functions.h"
 #include "caja-window.h"
+#include "caja-window-manage-views.h"
 #include <dlfcn.h>
 #include <signal.h>
 #include <eel/eel-debug.h>
@@ -187,6 +188,30 @@ static void sigusr1_handler (int sig)
         ;
 }
 
+static void sighup_handler (int sig)
+{
+    caja_debug_log (TRUE, CAJA_DEBUG_LOG_DOMAIN_USER,
+                    "HUP signal received, reloading windows");
+
+    GList *list_copy;
+    GList *l;
+
+    list_copy = g_list_copy (caja_application_get_window_list());
+
+    for (l = list_copy; l != NULL; l = l->next)
+    {   
+        CajaWindow *window;
+
+        window = CAJA_WINDOW (l->data);
+
+        if (CAJA_IS_NAVIGATION_WINDOW (window))
+        {   
+            caja_window_reload (window);
+        }
+    }
+
+}
+
 /* This is totally broken as we're using non-signal safe
  * calls in sigfatal_handler. Disable by default. */
 #ifdef USE_SEGV_HANDLER
@@ -247,6 +272,7 @@ static void
 setup_debug_log_signals (void)
 {
     struct sigaction sa;
+    struct sigaction sb;
     GIOChannel *io;
 
     if (pipe (debug_log_pipes) == -1)
@@ -258,7 +284,11 @@ setup_debug_log_signals (void)
     sa.sa_handler = sigusr1_handler;
     sigemptyset (&sa.sa_mask);
     sa.sa_flags = 0;
+    sb.sa_handler = sighup_handler;
+    sigemptyset (&sb.sa_mask);
+    sb.sa_flags = 0;
     sigaction (SIGUSR1, &sa, NULL);
+    sigaction (SIGHUP, &sb, NULL);
 
     /* This is totally broken as we're using non-signal safe
      * calls in sigfatal_handler. Disable by default. */
